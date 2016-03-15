@@ -611,15 +611,27 @@ class Move( object ) :
 class UCIEngine( object ) :
     # IGNORE_ANSWERS = [ "info currmove", "bestmove", "info depth", "info nodes" ]
     IGNORE_ANSWERS = []
+    INFO_REGEXP = re.compile( r'info.*score cp ([-]?[0-9]+) .*pv((?: [a-h][1-8][a-h][1-8])+)' )
     def __init__( self, pathToExecutable ) : 
        self.pathToExe = pathToExecutable
        self.init()
        self.positionString = "position startpos moves"
+       self.scoreCP = "0"
+       self.pv = ""
 
     def scanMultiPVLine( self, data ) :
         pass
 
-    def filterUCIOutput( self ) :
+    def filterUCIOutput( self, data ) :
+        if data.find( "info" ) == 0 :
+            # print( "scan info line: %s" % data )
+            match = self.INFO_REGEXP.match( data )
+            if match : 
+                self.scoreCP = match.group( 1 )
+                self.pv = match.group( 2 )
+                print( "score cp: %s pv: %s " % ( self.scoreCP, self.pv )  )
+            return
+        
         pass
         # we are only interested in "info .* .* score cp .* pv"
 
@@ -636,7 +648,8 @@ class UCIEngine( object ) :
                     printAnswer = False
                     break
             if printAnswer :
-                print( data, end = "" )
+                self.filterUCIOutput( data )
+                # print( data, end = "" )
             fileDescriptorList = poll.poll( 100 )
         return data
             
@@ -665,32 +678,40 @@ class UCIEngine( object ) :
         sleep( 0.1 )
         self.readUCIOutput()
 
+
     def analyzeGame( self, game ) :
         board = Board()
         board.startPosition()
         blackMissing = False
+        maxMovesCounter = 1 # limit moves for test purposes
+        moveCounter = 0
         for move in game.moves :
             if blackMissing :
                 raise BoardException( "White moves at %s after black has not moved", move.moveNumber )
-            
             algebraicMove = board.movePgn( move.whiteMove, "w" )
             self.nextMove( algebraicMove )
+            variationBoard = Board( board )
+            pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "b" )
+            print( "variation: %s" % pgnVariation )
             
             if move.blackMove : 
                 algebraicMove = board.movePgn( move.blackMove, "b" )
                 self.nextMove( algebraicMove )
+                variationBoard = Board( board )
+                pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "w" )
+                print( "variation: %s" % pgnVariation )
             else :
                 blackMissing = True
-
+            moveCounter += 1
+            if moveCounter >= maxMovesCounter :
+                break
             
 
 def testUCIEngine( game ) :
-    UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
-    # UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
+    # UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
+    UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
     engine = UCIEngine( UCI_ENGINE_PATH )
     engine.analyzeGame( game )
-    # engine.nextMove( "e2e4" )
-    # engine.nextMove( "g8f6" )
     engine.finish()
 
 def testBoard(): 
