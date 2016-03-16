@@ -28,19 +28,45 @@ class BoardException( Exception ) :
     def __str__(self):
         return self.msg
 
-##############################################################################################################    
+##############################################################################################################
+
+class ChessMove( object ) :
+    def __init__( self, whiteMoveString ):
+        self.move = whiteMoveString
+        self.scoreCP = None
+        self.variation = None
+        self.comments = list()
+
+    def __repr__( self ) :
+        s = "%s" % ( self.move if self.move else "" )
+        if self.scoreCP :
+            s += " {%s}" % ( self.scoreCP )
+        if self.variation :
+            s += " ( %s )" % ( self.variation )
+        return s
+        
 
 class ChessMovePair( object ) :
-    def __init__( self, moveNumber, whiteMove, blackMove ):
+    def __init__( self, moveNumber, whiteMoveString, blackMoveString ):
         self.moveNumber = moveNumber
-        self.whiteMove = whiteMove
-        self.blackMove = blackMove
-        self.whiteMoveCP = None
-        self.blackMoveCP = None
+        self.whiteMove( whiteMoveString )
+        self.blackMove( blackMoveString )
         self.comments = dict()
 
-    def setComment( self, place, comment ) :
+    def addComment( self, place, comment ) :
         self.comments[ place ] = comment
+
+    def whiteMove( self, moveString ) :
+        self.white = ChessMove( moveString ) if moveString else None
+
+    def blackMove( self, moveString ) :
+        self.black = ChessMove( moveString ) if moveString else None
+
+    def __repr__( self ) :
+        s = "%s." % ( self.moveNumber )
+        s += " %s" % ( self.white if self.white else ".." )
+        s += " %s" % ( self.black if self.black else "" )
+        return s
 
         
 class ChessGame( object ) :
@@ -59,21 +85,13 @@ class ChessGame( object ) :
             self.moves.append( self.lastMove )
         else :
             if whiteMove :
-                self.lastMove.whiteMove = whiteMove
+                self.lastMove.whiteMove( whiteMove )
             if blackMove :
-                self.lastMove.blackMove = blackMove
-
+                self.lastMove.blackMove( blackMove )
 
     def print( self ) :
         for move in self.moves :
-            print( "%s" % ( move.moveNumber ), end = "" )
-            print( "%s" % ( move.whiteMove if move.whiteMove else ".." ), end = "" )
-            if move.whiteMoveCP :
-                print( "{%s}" % ( move.whiteMoveCP ), end = "" )
-            print( "%s" % ( move.blackMove if move.blackMove else "" ), end = "" )
-            if move.blackMoveCP :
-                print( "{%s}" % ( move.blackMoveCP ), end = "" )
-            print()
+            print( "%s" % move )
        
 ##############################################################################################################    
 
@@ -160,6 +178,7 @@ class PgnParser( object ) :
         if not self.scanner.peek( self.MOVENUMBER ) :
             return None
         moveNumber = self.scanner.scan( self.MOVENUMBER )
+        moveNumber = moveNumber[:-1]
         comment = self.comments()
         if comment :
             # print( "Comment: %s" % comment )
@@ -574,6 +593,7 @@ class Board( object ) :
        squares = self.moveFigureOnBoard( color, figure, dst, captures )
        l = len( squares )
        if l == 0 :
+           self.print()
            raise BoardException( "no figure found" )
        elif l == 1 and ( figure != "P" or not captures ):
            figure = figure if figure != "P" else ""
@@ -587,6 +607,8 @@ class Board( object ) :
                srcResultString += str( unichr( ord( 'a' ) + src[ 0 ] - 1) )
            elif src[1 ] != dst[ 1 ] :
                srcResultString += str( unichr( ord( '1' ) + src[ 1 ] - 1 ) )
+           self.setSquare( src, " " )
+           self.setSquare( dst, coloredFigure )
            return "%s%s%s%s" % ( figure, srcResultString, captureString, m[2:] )
        
 
@@ -596,12 +618,37 @@ class Board( object ) :
        for m in moveList :
            print( "moveAlgebraic: %s" % ( m ) )
            pgnMove = self.moveAlgebraic( m, color )
-           print( "movePgn: %s" % ( pgnMove ) )
+           # print( "movePgn: %s" % ( pgnMove ) )
            pgnMoves += " " + pgnMove
+           print( "pgnMoves: %s" % ( pgnMoves ) )
            color = "b" if color == "w" else "w"
        return pgnMoves 
-       
- 
+
+   def formatVariation( self, variationString, moveNumberString, color ) :
+       s = ""
+       moveNumber = int( moveNumberString )
+       nextMoveIsBlack = color != "w"
+       moveList = variationString.split()
+       moveListSize = len( moveList )
+       i = 0
+       while i < moveListSize :
+           if nextMoveIsBlack :
+               nextMoveIsBlack = False
+               bm = moveList[ i ]
+               i += 1
+               s += " %s... %s" % ( moveNumber, bm )
+           else : 
+               wm = moveList[ i ]
+               i += 1
+               if i < moveListSize :
+                   bm = moveList[ i ]
+                   i += 1
+                   s += " %s. %s %s" % ( moveNumber, wm, bm )
+               else :
+                   s += " %s. %s" % ( moveNumber, wm )
+           moveNumber += 1
+       return s
+                   
 class Move( object ) :
     def __init__( self, movenumber, whiteMove, blackMove ) :
         pass
@@ -688,18 +735,24 @@ class UCIEngine( object ) :
         for move in game.moves :
             if blackMissing :
                 raise BoardException( "White moves at %s after black has not moved", move.moveNumber )
-            algebraicMove = board.movePgn( move.whiteMove, "w" )
+            algebraicMove = board.movePgn( move.white.move, "w" )
             self.nextMove( algebraicMove )
             variationBoard = Board( board )
             pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "b" )
+            pgnVariation = variationBoard.formatVariation( pgnVariation, move.moveNumber, "b" )
             print( "variation: %s" % pgnVariation )
+            move.white.scoreCP = self.scoreCP
+            move.white.variation = pgnVariation
             
-            if move.blackMove : 
-                algebraicMove = board.movePgn( move.blackMove, "b" )
+            if move.black : 
+                algebraicMove = board.movePgn( move.black.move, "b" )
                 self.nextMove( algebraicMove )
                 variationBoard = Board( board )
                 pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "w" )
+                pgnVariation = variationBoard.formatVariation( pgnVariation, move.moveNumber, "w" )
                 print( "variation: %s" % pgnVariation )
+                move.black.scoreCP = self.scoreCP
+                move.black.variation = pgnVariation
             else :
                 blackMissing = True
             moveCounter += 1
@@ -708,10 +761,11 @@ class UCIEngine( object ) :
             
 
 def testUCIEngine( game ) :
-    # UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
-    UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
+    UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
+    # UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
     engine = UCIEngine( UCI_ENGINE_PATH )
     engine.analyzeGame( game )
+    game.print()
     engine.finish()
 
 def testBoard(): 
@@ -772,9 +826,20 @@ def testShallowCopy() :
     b1.print()
     b.print()
 
-if __name__ == '__main__':
+def mainEntry() :
     if len( argv ) >= 2:
         game = parsePgnFile( argv[ 1 ] )
     testUCIEngine( game )
     # testShallowCopy()
     # testBoard()
+    
+# if __name__ == '__main__':
+mainEntry()
+
+#
+#
+# innaccuracy : 0.50
+# mistake: 1.00
+# blunder: 3.00
+#
+#
