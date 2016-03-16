@@ -416,7 +416,13 @@ class Board( object ) :
                stepList = [ ( 0, 1 ) ]
                if dst[ 1 ] == 5 :
                    stepList.append( ( 0, 2 ) )
-       return self.checkMove( figure, dst, stepList, False )
+       squares = self.checkMove( figure, dst, stepList, False )
+       if captures and len( squares ) == 1 :
+           src = squares[ 0 ]
+           if self.getSquare( dst ).figure == " " :
+               print( "Found en passant" )
+               self.setSquare( ( dst[ 0 ], src[ 0 ] ), " " )
+       return squares
 
    
    def positionStringToTupple( self, position ) :
@@ -546,25 +552,25 @@ class Board( object ) :
 
    
    def testCastlingAgebraic( self, m ) :
-       if m == "e1g1" :
+       if m == "e1g1" and self.getSquare( ( 5, 1 ) ).figure == "K" :
            self.setSquare( ( 5, 1 ), " " )
            self.setSquare( ( 8, 1 ), " " )
            self.setSquare( ( 7, 1 ), "K" )
            self.setSquare( ( 6, 1 ), "R" )
            return "O-O"
-       elif m == "e1c1" :
+       elif m == "e1c1" and self.getSquare( ( 5, 1 ) ).figure == "K" :
            self.setSquare( ( 5, 1 ), " " )
            self.setSquare( ( 1, 1 ), " " )
            self.setSquare( ( 3, 1 ), "K" )
            self.setSquare( ( 4, 1 ), "R" )
            return "O-O-O"
-       elif m == "e8g8" :
+       elif m == "e8g8"  and self.getSquare( ( 5, 8 ) ).figure == "k" :
            self.setSquare( ( 5, 8 ), " " )
            self.setSquare( ( 8, 8 ), " " )
            self.setSquare( ( 7, 8 ), "k" )
            self.setSquare( ( 6, 8 ), "r" )
            return "O-O"
-       elif m == "e8c8" :
+       elif m == "e8c8"  and self.getSquare( ( 5, 8 ) ).figure == "k" :
            self.setSquare( ( 5, 8 ), " " )
            self.setSquare( ( 8, 8 ), " " )
            self.setSquare( ( 3, 8 ), "k" )
@@ -588,6 +594,8 @@ class Board( object ) :
        # TODO handle 'en passant'
        captures = figureDst != " "
        captureString = "x" if captures else ""
+       if figure == "P" and dst[ 0 ] != src[ 0 ] :
+           captures = True 
        
        print( "Search for %s on square %s %s (captures %s %s)" % ( figure, dstString, dst, captures, figureDst ) )
        squares = self.moveFigureOnBoard( color, figure, dst, captures )
@@ -624,6 +632,7 @@ class Board( object ) :
            color = "b" if color == "w" else "w"
        return pgnMoves 
 
+   
    def formatVariation( self, variationString, moveNumberString, color ) :
        s = ""
        moveNumber = int( moveNumberString )
@@ -631,6 +640,8 @@ class Board( object ) :
        moveList = variationString.split()
        moveListSize = len( moveList )
        i = 0
+       if not nextMoveIsBlack :
+           moveNumber += 1
        while i < moveListSize :
            if nextMoveIsBlack :
                nextMoveIsBlack = False
@@ -674,7 +685,7 @@ class UCIEngine( object ) :
             # print( "scan info line: %s" % data )
             match = self.INFO_REGEXP.match( data )
             if match : 
-                self.scoreCP = match.group( 1 )
+                self.scoreCP = float( match.group( 1 ) ) / 100.0
                 self.pv = match.group( 2 )
                 print( "score cp: %s pv: %s " % ( self.scoreCP, self.pv )  )
             return
@@ -719,7 +730,7 @@ class UCIEngine( object ) :
         print( self.positionString, file = self.enginePipe.stdin )
         self.readUCIOutput()
         print( "go", file = self.enginePipe.stdin )
-        sleep( 1 )
+        sleep( 0.5 )
         self.readUCIOutput()
         print( "stop", file = self.enginePipe.stdin )
         sleep( 0.1 )
@@ -730,42 +741,56 @@ class UCIEngine( object ) :
         board = Board()
         board.startPosition()
         blackMissing = False
-        maxMovesCounter = 1 # limit moves for test purposes
+        maxMovesCounter = 300 # limit moves for test purposes
         moveCounter = 0
+        pgnVariation = None
+        previousScoreCP = 0.0
+        scoreThreshold = -1.1
+        
         for move in game.moves :
             if blackMissing :
                 raise BoardException( "White moves at %s after black has not moved", move.moveNumber )
             algebraicMove = board.movePgn( move.white.move, "w" )
             self.nextMove( algebraicMove )
             variationBoard = Board( board )
+            scoreCP = -self.scoreCP
+            move.white.scoreCP = scoreCP
+            if scoreCP - previousScoreCP < scoreThreshold :
+                print( "score cp difference %s" %  ( scoreCP - previousScoreCP ) )
+                move.white.variation = pgnVariation
             pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "b" )
             pgnVariation = variationBoard.formatVariation( pgnVariation, move.moveNumber, "b" )
             print( "variation: %s" % pgnVariation )
-            move.white.scoreCP = self.scoreCP
-            move.white.variation = pgnVariation
             
             if move.black : 
                 algebraicMove = board.movePgn( move.black.move, "b" )
                 self.nextMove( algebraicMove )
                 variationBoard = Board( board )
+                scoreCP = self.scoreCP
+                move.black.scoreCP = scoreCP
+                if scoreCP - previousScoreCP < scoreThreshold :
+                    print( "score cp difference %s" %  ( scoreCP - previousScoreCP ) )
+                    move.black.variation = pgnVariation
                 pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "w" )
                 pgnVariation = variationBoard.formatVariation( pgnVariation, move.moveNumber, "w" )
                 print( "variation: %s" % pgnVariation )
-                move.black.scoreCP = self.scoreCP
-                move.black.variation = pgnVariation
             else :
                 blackMissing = True
             moveCounter += 1
             if moveCounter >= maxMovesCounter :
                 break
-            
+        board.print()
 
 def testUCIEngine( game ) :
     UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
     # UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
     engine = UCIEngine( UCI_ENGINE_PATH )
     engine.analyzeGame( game )
+    print()
+    print()
     game.print()
+    print()
+    print()
     engine.finish()
 
 def testBoard(): 
