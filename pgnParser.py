@@ -95,9 +95,9 @@ class ChessGame( object ) :
             if blackMove :
                 self.lastMove.blackMove( blackMove )
 
-    def print( self ) :
+    def stream( self, file ) :
         for move in self.moves :
-            print( "%s" % move )
+            print( "%s" % move, file = file )
        
 ##############################################################################################################    
 
@@ -344,24 +344,22 @@ class Board( object ) :
    def startPosition( self ) :
         self.readFen( self.STARTPOS_FEN )
         
-   def print( self ) :
-       print()
-       print()
+   def logPrint( self ) :
+       s = "\n\n"
        r = 8
-       print( "  ---------------------------------" )
+       s += "  ---------------------------------\n"
        while r > 0 :
-            print( "  |   |   |   |   |   |   |   |   |" )
-            print( "%s " % r, end = "" )
+            s += "  |   |   |   |   |   |   |   |   |\n"
+            s += "%s " % r
             for f in xrange( 1, 9 ) :
                 sq = self.getSquare( ( f, r ) )
-                print( "| %s " % ( sq.figure ), end = "" )
+                s += "| %s " % ( sq.figure )
             r-= 1
-            print("|" )
-            print( "  |   |   |   |   |   |   |   |   |" )
-            print( "  ---------------------------------" )
-            print()
-       print( "    a   b   c   d   e   f   g   h" )
-       print()
+            s += "|\n"
+            s += "  |   |   |   |   |   |   |   |   |\n" 
+            s += "  ---------------------------------\n\n"
+       s += "    a   b   c   d   e   f   g   h\n" 
+       logging.debug( s )
    
    def checkMove( self, figure, dst, stepList, iterative ) :
        figureSquares = []
@@ -608,7 +606,7 @@ class Board( object ) :
        squares = self.moveFigureOnBoard( color, figure, dst, captures )
        l = len( squares )
        if l == 0 :
-           self.print()
+           self.logPrint()
            raise BoardException( "no figure found" )
        elif l == 1 and ( figure != "P" or not captures ):
            figure = figure if figure != "P" else ""
@@ -743,7 +741,7 @@ class UCIEngine( object ) :
         self.readUCIOutput()
 
 
-    def analyzeGame( self, game, timePerMove = 3, annotateWhite = True, annotateBlack = True ) :
+    def analyzeGame( self, game, timePerMove = 3, annotateWhite = True, annotateBlack = True, scoreThreshold = 1.1 ) :
         board = Board()
         board.startPosition()
         blackMissing = False
@@ -751,7 +749,6 @@ class UCIEngine( object ) :
         moveCounter = 0
         pgnVariation = None
         previousScoreCP = 0.0
-        scoreThreshold = 1.1
         
         for move in game.moves :
             if blackMissing :
@@ -787,91 +784,75 @@ class UCIEngine( object ) :
             moveCounter += 1
             if moveCounter >= maxMovesCounter :
                 break
-        board.print()
+        board.logPrint()
 
 def testUCIEngine( game, options ) :
     engine = UCIEngine( options.enginePath, options.timePerMove )
-    engine.analyzeGame( game, options.annotateWhite, options.annotateBlack )
-    print()
-    print()
-    game.print()
-    print()
-    print()
+    engine.analyzeGame( game, options.timePerMove, options.annotateWhite, options.annotateBlack, options.scoreThreshold )
+    if options.outputFile :
+        of = open( options.outputFile, "w" )
+    else :
+        of = sys.stdout
+        
+    game.stream( of )
+    if options.outputFile :
+        of.close()
+        
     engine.finish()
 
 def testBoard(): 
-    # b = Board()
-    # b.readFen( b.STARTPOS_FEN )
-    # b.print()
-    # 
-    # b.movePgn( "Nc3", "w" )
-    # b.movePgn( "Nf3", "w" )
-    # b.movePgn( "Nd4", "w" )
-    # b.movePgn( "Ncb5", "w" )
-    # b.movePgn( "e4", "w" )
-    # b.movePgn( "f5", "b" )
-    # b.movePgn( "Qh5", "w" )
-    # # b.movePgn( "exf5", "w" )
-    # b.print()
-    # 
-    # m = b.moveAlgebraic( "e4f5", "w" )
-    # print( "%s -> %s" % ( "e4f5", m ) )
-    # b.print()
-    # 
-    # m = b.moveAlgebraic( "h5f5", "w" )
-    # print( "%s -> %s" % ( "h5e5", m ) )
-    # b.print()
-    # 
-    # m = b.moveAlgebraic( "e1f1", "w" )
-    # print( "%s -> %s" % ( "e1f1", m ) )
-    # b.print()
-    
-    # print( "Position %s to %s" % ( "d2", b.positionStringToTupple( "d2" ) ) )
-    # print( "Position %s to %s" % ( "2", b.positionStringToTupple( "2" ) ) )
-    # print( "Position %s to %s" % ( "a", b.positionStringToTupple( "a" ) ) )
-
     b = Board()
     b.readFen( b.STARTPOS_FEN )
     b1 = Board( b )
-    # b1.print()
 
     moveAlgebraicList = "d2d4 d7d5 c1f4 g8f6 g1f3 e7e6 e2e3 f8d6 b1c3 e8g8 f1d3 d6f4 e3f4 d8d6 d1d2 a7a6 e1g1 b8c6 a2a3 c8d7 h2h3 h7h6 a1e1"
     pgnVariation = b1.transformListofAlgebraicMoveIntoPgn( moveAlgebraicList, "w" )
-    b1.print()
-    b.print()
-    print( "Algebraic: %s" % ( moveAlgebraicList ) )
-    print( "PGN: %s" % ( pgnVariation ) )
+    b1.logPrint()
+    b.logPrint()
+    logging.debug( "Algebraic: %s" % ( moveAlgebraicList ) )
+    logging.debug( "PGN: %s" % ( pgnVariation ) )
     
-
 def parsePgnFile( filename ) :
     parser = PgnParser( Scanner( filename ) )
     game = parser.game()
-    game.print()
+    game.stream( sys.stdout )
     return game
 
 
 # UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
-UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
+# UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
+
 
 def parseCommandLineOptions() :
     parser = OptionParser()
-    parser.add_option("-e", "--engine", dest = "enginePath", default = None,
-                      help = "path to UCI chess engine executable file" )
-    parser.add_option("-i", "--input", dest = "inputFile", default = None,
-                      help = "PGN input file" )
-    parser.add_option("-o", "--output", dest = "outputFile", default = None,
-                      help = "the annotated PGN File, defaults to stdout" )
-    parser.add_option("-t", "--timePerMove", dest = "timePerMove",
-                      type = "int", default = 3,
-                      help = "seconds per move ply" )
-    parser.add_option("-w", "--white",
-                      action = "store_true", dest = "annotateWhite", default = False,
-                      help = "annotate only white players moves" )
-    parser.add_option("-b", "--black",
-                      action = "store_true", dest = "annotateBlack", default = False,
-                      help = "annotate only white players moves" )
+    parser.add_option( "-e", "--engine", dest = "enginePath", default = None,
+                       help = "path to UCI chess engine executable file" )
+    parser.add_option( "-i", "--input", dest = "inputFile", default = None,
+                       help = "PGN input file" )
+    parser.add_option( "-o", "--output", dest = "outputFile", default = None,
+                       help = "the annotated PGN File, defaults to stdout" )
+    parser.add_option( "--timePerMove", dest = "timePerMove",
+                       type = "float", default = 3.0,
+                       help = "seconds per move ply" )
+    parser.add_option( "--threshold", dest = "scoreThreshold",
+                       type = "float", default = 1.1,
+                       help = "pawn value difference to annotate" )
+    parser.add_option( "--variationForBadMove",
+                       action = "store_true", dest = "variationForBadMove", default = False,
+                       help = "also show how a bad could develop" )
+    parser.add_option( "-w", "--white",
+                       action = "store_true", dest = "annotateWhite", default = False,
+                       help = "annotate only white players moves" )
+    parser.add_option( "-b", "--black",
+                       action = "store_true", dest = "annotateBlack", default = False,
+                       help = "annotate only white players moves" )
+    parser.add_option( "--debug",
+                       action = "store_true", dest = "debug", default = False,
+                       help = "enable debug messages" )
     (options, args) = parser.parse_args()
-    
+
+    if options.debug :
+        logging.basicConfig( level = logging.DEBUG )
     if options.enginePath == None :
         parser.error( "Engine is missing" )
     if options.inputFile == None :
@@ -879,6 +860,7 @@ def parseCommandLineOptions() :
     if not options.annotateWhite and not options.annotateBlack :
         options.annotateWhite = True
         options.annotateBlack = True
+        
     return (options, args)
     
 
