@@ -1,3 +1,9 @@
+##############################################################################################
+#
+#
+#
+#
+##############################################################################################
 
 from __future__ import print_function
 import sys, re
@@ -5,7 +11,7 @@ from sys import argv, stdin
 from subprocess import Popen, PIPE
 from time import sleep 
 import select
-
+from optparse import OptionParser
 
 class SyntaxError( Exception ):
     """When we run into an unexpected token, this is the exception to use"""
@@ -39,8 +45,8 @@ class ChessMove( object ) :
 
     def __repr__( self ) :
         s = "%s" % ( self.move if self.move else "" )
-        if self.scoreCP :
-            s += " {%s}" % ( self.scoreCP )
+        if self.scoreCP != None :
+            s += " {%.1f}" % ( self.scoreCP )
         if self.variation :
             s += " ( %s )" % ( self.variation )
         return s
@@ -729,15 +735,15 @@ class UCIEngine( object ) :
         print()
         print( self.positionString, file = self.enginePipe.stdin )
         self.readUCIOutput()
-        print( "go", file = self.enginePipe.stdin )
-        sleep( 0.5 )
+        print( "go infinite", file = self.enginePipe.stdin )
+        sleep( 2.0 )
         self.readUCIOutput()
         print( "stop", file = self.enginePipe.stdin )
         sleep( 0.1 )
         self.readUCIOutput()
 
 
-    def analyzeGame( self, game ) :
+    def analyzeGame( self, game, annotateWhite = True, annotateBlack = True ) :
         board = Board()
         board.startPosition()
         blackMissing = False
@@ -745,7 +751,7 @@ class UCIEngine( object ) :
         moveCounter = 0
         pgnVariation = None
         previousScoreCP = 0.0
-        scoreThreshold = -1.1
+        scoreThreshold = 1.1
         
         for move in game.moves :
             if blackMissing :
@@ -755,9 +761,10 @@ class UCIEngine( object ) :
             variationBoard = Board( board )
             scoreCP = -self.scoreCP
             move.white.scoreCP = scoreCP
-            if scoreCP - previousScoreCP < scoreThreshold :
+            if annotateWhite and scoreCP - previousScoreCP < -scoreThreshold :
                 print( "score cp difference %s" %  ( scoreCP - previousScoreCP ) )
                 move.white.variation = pgnVariation
+            previousScoreCP = scoreCP
             pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "b" )
             pgnVariation = variationBoard.formatVariation( pgnVariation, move.moveNumber, "b" )
             print( "variation: %s" % pgnVariation )
@@ -768,9 +775,10 @@ class UCIEngine( object ) :
                 variationBoard = Board( board )
                 scoreCP = self.scoreCP
                 move.black.scoreCP = scoreCP
-                if scoreCP - previousScoreCP < scoreThreshold :
+                if annotateBlack and scoreCP - previousScoreCP > scoreThreshold :
                     print( "score cp difference %s" %  ( scoreCP - previousScoreCP ) )
                     move.black.variation = pgnVariation
+                previousScoreCP = scoreCP
                 pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "w" )
                 pgnVariation = variationBoard.formatVariation( pgnVariation, move.moveNumber, "w" )
                 print( "variation: %s" % pgnVariation )
@@ -782,10 +790,10 @@ class UCIEngine( object ) :
         board.print()
 
 def testUCIEngine( game ) :
-    UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
-    # UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
+    # UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
+    UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
     engine = UCIEngine( UCI_ENGINE_PATH )
-    engine.analyzeGame( game )
+    engine.analyzeGame( game, True, False )
     print()
     print()
     game.print()
@@ -844,18 +852,22 @@ def parsePgnFile( filename ) :
     return game
 
 
-def testShallowCopy() :
-    b = Board()
-    b1 = Board( b )
-    b.readFen( b.STARTPOS_FEN )
-    b1.print()
-    b.print()
+def parseCommandLineOptions() :
+    parser = OptionParser()
+    parser.add_option("-e", "--engine", dest="enginePath",
+                      help="path to UCI chess engine executable file" )
+    parser.add_option("-q", "--quiet",
+                      action="store_false", dest="verbose", default=True,
+                      help="don't print status messages to stdout")
+    (options, args) = parser.parse_args()
+    return (options, args)
+    
 
 def mainEntry() :
     if len( argv ) >= 2:
         game = parsePgnFile( argv[ 1 ] )
+    ( options, args ) = parseCommandLineOptions()
     testUCIEngine( game )
-    # testShallowCopy()
     # testBoard()
     
 # if __name__ == '__main__':
@@ -868,3 +880,17 @@ mainEntry()
 # blunder: 3.00
 #
 #
+
+
+
+# TODO : 
+#
+#  - read command line options 
+#  - save to result file
+#  - time for move
+#  - threshold for annotating variation
+#  - path to engine 
+#  - which color to annotate
+#
+#
+   
