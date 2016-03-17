@@ -7,11 +7,11 @@
 
 from __future__ import print_function
 import sys, re
-from sys import argv, stdin
 from subprocess import Popen, PIPE
 from time import sleep 
 import select
 from optparse import OptionParser
+import logging
 
 class SyntaxError( Exception ):
     """When we run into an unexpected token, this is the exception to use"""
@@ -170,35 +170,35 @@ class PgnParser( object ) :
 
     def tag( self ) :
         tagtext = self.scanner.scan( self.TAGTEXT )
-        print( "Tag: %s" % tagtext )
+        logging.debug( "Tag: %s" % tagtext )
         return tagtext
 
     def moves( self ) :
         m = self.move()
         while m :
-            print( "Move: %s %s %s" % m )
+            logging.debug( "Move: %s %s %s" % m )
             m = self.move()
 
     def move( self ) :
-        # print( "Scan moves" )
+        # logging.debug( "Scan moves" )
         if not self.scanner.peek( self.MOVENUMBER ) :
             return None
         moveNumber = self.scanner.scan( self.MOVENUMBER )
         moveNumber = moveNumber[:-1]
         comment = self.comments()
         if comment :
-            # print( "Comment: %s" % comment )
+            logging.debug( "Comment: %s" % comment )
             pass
         if self.scanner.peek( self.PIECEPLACEHOLDER ) :
            self.scanner.scan( self.PIECEPLACEHOLDER )
            comment = self.comments()
            if comment :
-               # print( "Comment: %s" % comment )
+               # logging.debug( "Comment: %s" % comment )
                pass
            pieceMoveBlack = self.scanner.scan( self.PIECEMOVE )
            comment = self.comments()
            if comment :
-               # print( "Comment: %s" % comment )
+               logging.debug( "Comment: %s" % comment )
                pass
            self.chessGame.addMove( moveNumber, None, pieceMoveBlack )
            return ( moveNumber, None, pieceMoveBlack )
@@ -206,13 +206,13 @@ class PgnParser( object ) :
            pieceMoveWhite = self.scanner.scan( self.PIECEMOVE )
            comment = self.comments()
            if comment :
-               # print( "Comment: %s" % comment )
+               logging.debug( "Comment: %s" % comment )
                pass
            if self.scanner.peek( self.PIECEMOVE ) :
                pieceMoveBlack = self.scanner.scan( self.PIECEMOVE )
                comment = self.comments()
                if comment :
-                   # print( "Comment: %s" % comment )
+                   # logging.debug( "Comment: %s" % comment )
                    pass
                self.chessGame.addMove( moveNumber, pieceMoveWhite, pieceMoveBlack )
                return ( moveNumber, pieceMoveWhite, pieceMoveBlack )
@@ -221,7 +221,7 @@ class PgnParser( object ) :
                return ( moveNumber, pieceMoveWhite, None )
 
     def comments( self ) :
-        # print( "Scan comments" )
+        # logging.debug( "Scan comments" )
         c = None
         c1 = self.comment()
         while c1 :
@@ -233,7 +233,7 @@ class PgnParser( object ) :
         return c
 
     def comment( self ) :
-        # print( "Scan comment" )
+        # logging.debug( "Scan comment" )
         c1 = self.comment1()
         if c1:
             return c1
@@ -241,9 +241,9 @@ class PgnParser( object ) :
     
     def comment1( self ) :
         if not self.scanner.peek( self.COMMENT1START ) :
-            # print( "Scan comment1: no start found" )
+            # logging.debug( "Scan comment1: no start found" )
             return None
-        # print( "Scan comment1" )
+        # logging.debug( "Scan comment1" )
         c = self.scanner.scan( self.COMMENT1START )
         matchFound = True
         while matchFound : 
@@ -256,14 +256,14 @@ class PgnParser( object ) :
                 c = c + c1
                 matchFound = True
         c = c + self.scanner.scan( self.COMMENT1END )
-        # print( "Comment1: %s" % c )
+        # logging.debug( "Comment1: %s" % c )
         return c
 
     def comment2( self ) :
         if not self.scanner.peek( self.COMMENT2START ) :
-            # print( "Scan comment2: no start found" )
+            # logging.debug( "Scan comment2: no start found" )
             return None
-        # print( "Scan comment2" )
+        # logging.debug( "Scan comment2" )
         c = self.scanner.scan( self.COMMENT2START )
         matchFound = True
         while matchFound : 
@@ -276,7 +276,7 @@ class PgnParser( object ) :
                 c = c + c1
                 matchFound = True
         c = c + self.scanner.scan( self.COMMENT2END )
-        # print( "Comment2: %s" % c )
+        # logging.debug( "Comment2: %s" % c )
         return c
 
 
@@ -307,7 +307,7 @@ class Board( object ) :
            for f in xrange( 1, 9 ) : 
                self.squares.append( Square( color, figure ) ) 
                color = "w" if color == "b" else "b" 
-       # print( "we have %s squares" % len( self.squares ) ) 
+       # logging.debug( "we have %s squares" % len( self.squares ) ) 
        
    def move( self, m ) :
        pass 
@@ -324,7 +324,7 @@ class Board( object ) :
        return self.squares[ ( p[ 1 ] - 1 ) * 8 + ( p[ 0 ]  - 1 )]
 
    def setSquare( self, p, figure ) :
-       # print( "setSquare %s %s %s" % ( r,f, figure ) )
+       # logging.debug( "setSquare %s %s %s" % ( r,f, figure ) )
        self.squares[( p[ 1 ] - 1 ) * 8 + ( p[ 0 ]  -1 )].figure = figure
 
    def readFen( self, fen ) :
@@ -376,7 +376,7 @@ class Board( object ) :
                if not iterative :
                     break
                p2 = ( p2[ 0 ] + step[ 0 ], p2[ 1 ] + step[ 1 ] )
-       print( "Check square %s for figure %s found %s" % ( p2, figure, figureSquares ) )
+       logging.debug( "Check square %s for figure %s found %s" % ( p2, figure, figureSquares ) )
        return figureSquares
 
        
@@ -406,13 +406,14 @@ class Board( object ) :
 
    
    def checkPawnMove( self, figure, dst, color, captures ) :
+       ( dstFile, dstRank ) = dst
        if color == "w" :
            if captures :
                # TODO handle en passant capture
                stepList = ( ( 1, -1 ), ( -1, -1 ) )
            else:
                stepList = [ ( 0, -1 ) ]
-               if dst[ 1 ] == 4 :
+               if dstRank == 4 :
                    stepList.append( ( 0, -2 ) )
        else :
            if captures :
@@ -420,14 +421,14 @@ class Board( object ) :
                stepList = ( ( 1, 1 ), ( -1, 1 ) )
            else:
                stepList = [ ( 0, 1 ) ]
-               if dst[ 1 ] == 5 :
+               if dstRank == 5 :
                    stepList.append( ( 0, 2 ) )
        squares = self.checkMove( figure, dst, stepList, False )
        if captures and len( squares ) == 1 :
-           src = squares[ 0 ]
+           ( srcFile, srcRank ) = squares[ 0 ]
            if self.getSquare( dst ).figure == " " :
-               print( "Found en passant" )
-               self.setSquare( ( dst[ 0 ], src[ 0 ] ), " " )
+               logging.debug( "Found en passant" )
+               self.setSquare( ( dstFile, srcRank ), " " )
        return squares
 
    
@@ -487,17 +488,17 @@ class Board( object ) :
 
        moveMatch = self.PGN_MOVE_ENCODING.match( move )
        if moveMatch :
-           print( "Found match: %s" % moveMatch.group( 0 ) )
+           logging.debug( "Found match: %s" % moveMatch.group( 0 ) )
            figure = moveMatch.group( 1 )
            coloredFigure = self.coloredFigure( figure, color )
            fromFileAndRank = moveMatch.group( 2 )
            captures =  True if moveMatch.group( 3 ) == "x" else False
            toFileAndRank  = moveMatch.group( 4 )
-           print( "Move %s from %s to %s color %s" % ( coloredFigure, fromFileAndRank, toFileAndRank, color ) )
+           logging.debug( "Move %s from %s to %s color %s" % ( coloredFigure, fromFileAndRank, toFileAndRank, color ) )
            dst = self.positionStringToTupple( toFileAndRank )
            srcHint = self.positionStringToTupple( fromFileAndRank )
            squares = self.moveFigureOnBoard( color, figure, dst, captures )
-           print( "Found possible source squares: %s" % ( squares ) )
+           logging.debug( "Found possible source squares: %s" % ( squares ) )
            if len( squares ) == 0 :
                raise BoardException( "No figure found" )
            elif len( squares ) == 1 :
@@ -523,7 +524,7 @@ class Board( object ) :
                        self.setSquare( dst, coloredFigure )
                        break
            algebraicMove = "%s%s" % ( fromFileAndRank, toFileAndRank )
-           print( "algebraicMove: %s" % algebraicMove )
+           logging.debug( "algebraicMove: %s" % algebraicMove )
            return algebraicMove
        raise BoardException( "Unknown move %s for %s" % ( move, color ) )
        return None
@@ -603,7 +604,7 @@ class Board( object ) :
        if figure == "P" and dst[ 0 ] != src[ 0 ] :
            captures = True 
        
-       print( "Search for %s on square %s %s (captures %s %s)" % ( figure, dstString, dst, captures, figureDst ) )
+       logging.debug( "Search for %s on square %s %s (captures %s %s)" % ( figure, dstString, dst, captures, figureDst ) )
        squares = self.moveFigureOnBoard( color, figure, dst, captures )
        l = len( squares )
        if l == 0 :
@@ -630,11 +631,11 @@ class Board( object ) :
        pgnMoves = ""
        moveList = moveListString.split()
        for m in moveList :
-           print( "moveAlgebraic: %s" % ( m ) )
+           logging.debug( "moveAlgebraic: %s" % ( m ) )
            pgnMove = self.moveAlgebraic( m, color )
-           # print( "movePgn: %s" % ( pgnMove ) )
+           # logging.debug( "movePgn: %s" % ( pgnMove ) )
            pgnMoves += " " + pgnMove
-           print( "pgnMoves: %s" % ( pgnMoves ) )
+           logging.debug( "pgnMoves: %s" % ( pgnMoves ) )
            color = "b" if color == "w" else "w"
        return pgnMoves 
 
@@ -676,24 +677,25 @@ class UCIEngine( object ) :
     # IGNORE_ANSWERS = [ "info currmove", "bestmove", "info depth", "info nodes" ]
     IGNORE_ANSWERS = []
     INFO_REGEXP = re.compile( r'info.*score cp ([-]?[0-9]+) .*pv((?: [a-h][1-8][a-h][1-8])+)' )
-    def __init__( self, pathToExecutable ) : 
+    def __init__( self, pathToExecutable, timePerMove = 3 ) : 
        self.pathToExe = pathToExecutable
        self.init()
        self.positionString = "position startpos moves"
        self.scoreCP = "0"
        self.pv = ""
+       self.timePerMove = timePerMove
 
     def scanMultiPVLine( self, data ) :
         pass
 
     def filterUCIOutput( self, data ) :
         if data.find( "info" ) == 0 :
-            # print( "scan info line: %s" % data )
+            # logging.debug( "scan info line: %s" % data )
             match = self.INFO_REGEXP.match( data )
             if match : 
                 self.scoreCP = float( match.group( 1 ) ) / 100.0
                 self.pv = match.group( 2 )
-                print( "score cp: %s pv: %s " % ( self.scoreCP, self.pv )  )
+                logging.debug( "score cp: %s pv: %s " % ( self.scoreCP, self.pv )  )
             return
         
         pass
@@ -713,7 +715,7 @@ class UCIEngine( object ) :
                     break
             if printAnswer :
                 self.filterUCIOutput( data )
-                # print( data, end = "" )
+                # logging.debug( data, end = "" )
             fileDescriptorList = poll.poll( 100 )
         return data
             
@@ -730,20 +732,18 @@ class UCIEngine( object ) :
         
     def nextMove( self, m ) :
         self.positionString = self.positionString + " " + m
-        print()
-        print( self.positionString )
-        print()
+        logging.debug( self.positionString )
         print( self.positionString, file = self.enginePipe.stdin )
         self.readUCIOutput()
         print( "go infinite", file = self.enginePipe.stdin )
-        sleep( 2.0 )
+        sleep( self.timePerMove )
         self.readUCIOutput()
         print( "stop", file = self.enginePipe.stdin )
         sleep( 0.1 )
         self.readUCIOutput()
 
 
-    def analyzeGame( self, game, annotateWhite = True, annotateBlack = True ) :
+    def analyzeGame( self, game, timePerMove = 3, annotateWhite = True, annotateBlack = True ) :
         board = Board()
         board.startPosition()
         blackMissing = False
@@ -762,12 +762,12 @@ class UCIEngine( object ) :
             scoreCP = -self.scoreCP
             move.white.scoreCP = scoreCP
             if annotateWhite and scoreCP - previousScoreCP < -scoreThreshold :
-                print( "score cp difference %s" %  ( scoreCP - previousScoreCP ) )
+                logging.debug( "score cp difference %s" %  ( scoreCP - previousScoreCP ) )
                 move.white.variation = pgnVariation
             previousScoreCP = scoreCP
             pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "b" )
             pgnVariation = variationBoard.formatVariation( pgnVariation, move.moveNumber, "b" )
-            print( "variation: %s" % pgnVariation )
+            logging.debug( "variation: %s" % pgnVariation )
             
             if move.black : 
                 algebraicMove = board.movePgn( move.black.move, "b" )
@@ -776,12 +776,12 @@ class UCIEngine( object ) :
                 scoreCP = self.scoreCP
                 move.black.scoreCP = scoreCP
                 if annotateBlack and scoreCP - previousScoreCP > scoreThreshold :
-                    print( "score cp difference %s" %  ( scoreCP - previousScoreCP ) )
+                    logging.debug( "score cp difference %s" %  ( scoreCP - previousScoreCP ) )
                     move.black.variation = pgnVariation
                 previousScoreCP = scoreCP
                 pgnVariation = variationBoard.transformListofAlgebraicMoveIntoPgn( self.pv, "w" )
                 pgnVariation = variationBoard.formatVariation( pgnVariation, move.moveNumber, "w" )
-                print( "variation: %s" % pgnVariation )
+                logging.debug( "variation: %s" % pgnVariation )
             else :
                 blackMissing = True
             moveCounter += 1
@@ -789,11 +789,9 @@ class UCIEngine( object ) :
                 break
         board.print()
 
-def testUCIEngine( game ) :
-    # UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
-    UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
-    engine = UCIEngine( UCI_ENGINE_PATH )
-    engine.analyzeGame( game, True, False )
+def testUCIEngine( game, options ) :
+    engine = UCIEngine( options.enginePath, options.timePerMove )
+    engine.analyzeGame( game, options.annotateWhite, options.annotateBlack )
     print()
     print()
     game.print()
@@ -852,25 +850,43 @@ def parsePgnFile( filename ) :
     return game
 
 
+# UCI_ENGINE_PATH = "/home/ebayerle/temp/Critter-16a/critter-16a-64bit"
+UCI_ENGINE_PATH = "/Users/ebayerle/Downloads/stockfish-7-mac/Mac/stockfish-7-64"
+
 def parseCommandLineOptions() :
     parser = OptionParser()
-    parser.add_option("-e", "--engine", dest="enginePath",
-                      help="path to UCI chess engine executable file" )
-    parser.add_option("-q", "--quiet",
-                      action="store_false", dest="verbose", default=True,
-                      help="don't print status messages to stdout")
+    parser.add_option("-e", "--engine", dest = "enginePath", default = None,
+                      help = "path to UCI chess engine executable file" )
+    parser.add_option("-i", "--input", dest = "inputFile", default = None,
+                      help = "PGN input file" )
+    parser.add_option("-o", "--output", dest = "outputFile", default = None,
+                      help = "the annotated PGN File, defaults to stdout" )
+    parser.add_option("-t", "--timePerMove", dest = "timePerMove",
+                      type = "int", default = 3,
+                      help = "seconds per move ply" )
+    parser.add_option("-w", "--white",
+                      action = "store_true", dest = "annotateWhite", default = False,
+                      help = "annotate only white players moves" )
+    parser.add_option("-b", "--black",
+                      action = "store_true", dest = "annotateBlack", default = False,
+                      help = "annotate only white players moves" )
     (options, args) = parser.parse_args()
+    
+    if options.enginePath == None :
+        parser.error( "Engine is missing" )
+    if options.inputFile == None :
+        parser.error( "PGN input is missing" )
+    if not options.annotateWhite and not options.annotateBlack :
+        options.annotateWhite = True
+        options.annotateBlack = True
     return (options, args)
     
 
 def mainEntry() :
-    if len( argv ) >= 2:
-        game = parsePgnFile( argv[ 1 ] )
     ( options, args ) = parseCommandLineOptions()
-    testUCIEngine( game )
-    # testBoard()
+    game = parsePgnFile( options.inputFile )
+    testUCIEngine( game, options )
     
-# if __name__ == '__main__':
 mainEntry()
 
 #
@@ -889,8 +905,10 @@ mainEntry()
 #  - save to result file
 #  - time for move
 #  - threshold for annotating variation
-#  - path to engine 
 #  - which color to annotate
 #
 #
    
+# TODO : logging
+#
+#
